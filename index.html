@@ -1,0 +1,125 @@
+<!DOCTYPE html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Essenca</title>
+<link rel="manifest" href="manifest.json"><meta name="theme-color" content="#1565d8"><link rel="icon" href="icons/icon-192.png"><link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,sans-serif;background:#f3f7fd;color:#12243d}
+header{background:#1565d8;color:#fff;padding:12px 16px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:5}
+header img{width:32px;height:32px;background:#fff;border-radius:50%}header b{flex:1;font-size:18px}
+main{max-width:760px;margin:0 auto;padding:14px 14px 90px}
+.card{background:#fff;border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 1px 4px #0001}
+h2{margin:6px 0 10px;font-size:20px}h3{margin:0 0 6px;font-size:16px}
+button,.btn{background:#1565d8;color:#fff;border:0;border-radius:10px;padding:10px 14px;font-size:15px;cursor:pointer}
+button.sec{background:#e3edfc;color:#1565d8}button.sm{padding:6px 10px;font-size:13px}
+input,select{width:100%;padding:10px;border:1px solid #c5d3e8;border-radius:10px;font-size:15px;margin:4px 0 8px}
+nav{position:fixed;bottom:0;left:0;right:0;background:#fff;display:flex;border-top:1px solid #dbe5f3}
+nav button{flex:1;background:none;color:#6b7c93;border-radius:0;padding:10px 2px;font-size:12px}nav button.on{color:#1565d8;font-weight:700}
+#auth{max-width:380px;margin:8vh auto;padding:20px;text-align:center}#auth img{width:90px}
+.bar{height:8px;background:#e3edfc;border-radius:8px;overflow:hidden}.bar i{display:block;height:100%;background:#1565d8}
+.opt{display:block;padding:9px 10px;border:1px solid #c5d3e8;border-radius:10px;margin:6px 0;cursor:pointer}
+.ok{background:#e4f6e9;border-color:#2e9e53}.bad{background:#fdeaea;border-color:#d64545}
+.exp{font-size:13px;background:#fff8e1;padding:8px;border-radius:8px;margin-top:6px}
+li{margin:4px 0}.muted{color:#6b7c93;font-size:13px}.row{display:flex;gap:8px;align-items:center}
+.day{border-left:4px solid #1565d8;padding-left:10px;margin:10px 0}.day.today{background:#eaf2ff}.day.done{opacity:.55}
+#toast{position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:#12243d;color:#fff;padding:8px 14px;border-radius:20px;display:none}
+</style></head><body>
+<div id="auth"><img src="icons/icon-192.png" alt=""><h2>Essenca</h2><p class="muted">Persiapan sertifikasi Chartered Accountant</p>
+<input id="em" type="email" placeholder="Email"><input id="pw" type="password" placeholder="Kata sandi (min. 6)">
+<div class="row"><button style="flex:1" onclick="login()">Masuk</button><button class="sec" style="flex:1" onclick="reg()">Daftar</button></div>
+<p><a href="#" onclick="guest();return false">Lanjut tanpa akun (mode lokal)</a></p><p id="aerr" style="color:#d64545"></p></div>
+<div id="app" hidden><header><img src="icons/icon-192.png" alt=""><b>Essenca</b><button class="sm sec" onclick="logout()">Keluar</button></header>
+<main id="view"></main>
+<nav><button data-t="home">Beranda</button><button data-t="mod">Modul</button><button data-t="ujian">Ujian</button><button data-t="jadwal">Jadwal</button></nav></div>
+<div id="toast"></div>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+const FIREBASE_CONFIG={apiKey:"ISI_API_KEY",authDomain:"ISI",projectId:"ISI",storageBucket:"ISI",messagingSenderId:"ISI",appId:"ISI"};
+const useFb=!FIREBASE_CONFIG.apiKey.startsWith("ISI");let auth,db,user=null;
+const M=[
+{n:"Akuntansi Keuangan",topics:[
+{t:"Persediaan & Aset Tetap",p:["Persediaan (PSAK 14) diukur pada nilai terendah antara biaya perolehan dan nilai realisasi neto.","Metode biaya: FIFO atau rata-rata tertimbang; LIFO tidak diperbolehkan.","Aset tetap (PSAK 16): biaya perolehan, penyusutan dimulai saat aset siap digunakan, model biaya atau revaluasi."]},
+{t:"Pendapatan & Sewa",p:["PSAK 72, lima langkah: identifikasi kontrak, identifikasi kewajiban pelaksanaan, tentukan harga transaksi, alokasikan harga, akui pendapatan saat/ketika kewajiban terpenuhi.","PSAK 73: penyewa mengakui aset hak-guna dan liabilitas sewa untuk hampir semua sewa."]}],
+q:[["Persediaan menurut PSAK 14 diukur pada...",["Biaya atau harga pasar yang lebih tinggi","Nilai terendah antara biaya dan nilai realisasi neto","Selalu nilai wajar","Harga jual"],1,"PSAK 14: nilai terendah antara biaya dan NRV."],
+["Penyusutan aset tetap mulai diakui ketika...",["Aset dipesan","Aset dibayar lunas","Aset siap digunakan","Awal tahun berikutnya"],2,"Penyusutan dimulai saat aset berada pada lokasi dan kondisi siap digunakan."],
+["Langkah pertama pengakuan pendapatan PSAK 72 adalah...",["Alokasi harga transaksi","Identifikasi kontrak dengan pelanggan","Pengakuan pendapatan","Penentuan harga transaksi"],1,"Langkah 1: identifikasi kontrak dengan pelanggan."],
+["Pada PSAK 73, penyewa mengakui...",["Beban sewa saja","Aset hak-guna dan liabilitas sewa","Piutang sewa","Hanya liabilitas sewa"],1,"Model tunggal penyewa: aset hak-guna dan liabilitas sewa."]]},
+{n:"Audit & Assurance",topics:[
+{t:"Risiko & Materialitas",p:["Risiko audit = risiko salah saji material (inheren x pengendalian) x risiko deteksi.","Pengendalian lemah: turunkan risiko deteksi dengan memperluas prosedur substantif.","Materialitas pelaksanaan ditetapkan di bawah materialitas laporan keuangan secara keseluruhan."]},
+{t:"Bukti & Opini",p:["Bukti eksternal yang diperoleh langsung auditor (misal konfirmasi) paling andal.","Opini WTM: laporan keuangan disajikan wajar dalam semua hal yang material.","Jenis lain: WDP, tidak wajar, tidak menyatakan pendapat."]}],
+q:[["Jika risiko pengendalian dinilai tinggi, auditor sebaiknya...",["Mengurangi prosedur substantif","Memperluas prosedur substantif","Menghentikan audit","Menaikkan materialitas"],1,"Risiko deteksi harus rendah sehingga substantif diperluas."],
+["Materialitas pelaksanaan umumnya...",["Lebih tinggi dari materialitas keseluruhan","Sama dengan laba bersih","Lebih rendah dari materialitas keseluruhan","Tidak diperlukan"],2,"Dibuat lebih rendah untuk menekan risiko salah saji tak terdeteksi."],
+["Bukti audit yang paling andal adalah...",["Representasi lisan manajemen","Dokumen internal","Konfirmasi eksternal langsung ke auditor","Fotokopi faktur"],2,"Bukti eksternal yang diperoleh langsung lebih andal."],
+["Opini wajar tanpa modifikasian menyatakan laporan keuangan...",["Bebas dari kesalahan","Disajikan wajar dalam semua hal yang material","Dijamin tidak ada kecurangan","Sudah diaudit 100%"],1,"Audit memberi keyakinan memadai, bukan mutlak."]]},
+{n:"Perpajakan",topics:[
+{t:"PPh Badan",p:["Tarif umum PPh Badan 22%.","Koreksi fiskal positif: biaya yang tidak boleh dikurangkan (sanksi pajak, jamuan tanpa daftar nominatif, dll.).","SPT Tahunan Badan disampaikan paling lambat akhir bulan keempat setelah tahun pajak berakhir."]},
+{t:"Penyusutan Fiskal",p:["Bangunan: hanya metode garis lurus.","Aset bukan bangunan: garis lurus atau saldo menurun sesuai kelompok masa manfaat."]}],
+q:[["Tarif umum PPh Badan adalah...",["10%","22%","25%","30%"],1,"Tarif umum PPh Badan 22%."],
+["Contoh koreksi fiskal positif:",["Gaji karyawan","Sanksi administrasi pajak","Sewa kantor","Listrik kantor"],1,"Sanksi pajak tidak dapat dikurangkan."],
+["Batas penyampaian SPT Tahunan PPh Badan:",["Akhir bulan ketiga","Akhir bulan keempat","Akhir bulan keenam","31 Desember"],1,"Paling lambat akhir bulan keempat setelah akhir tahun pajak."],
+["Penyusutan fiskal bangunan menggunakan...",["Saldo menurun","Garis lurus","Unit produksi","Bebas pilih"],1,"Bangunan hanya boleh garis lurus."]]},
+{n:"Hukum Bisnis",topics:[
+{t:"Perjanjian",p:["Syarat sah (Pasal 1320 KUHPerdata): sepakat, cakap, hal tertentu, sebab yang halal.","Syarat subjektif (sepakat, cakap) dilanggar: dapat dibatalkan. Syarat objektif dilanggar: batal demi hukum.","Wanprestasi: debitur lalai memenuhi prestasi."]},
+{t:"Perseroan Terbatas",p:["Organ PT: RUPS, Direksi, Dewan Komisaris.","Pemegang saham bertanggung jawab terbatas pada saham yang dimiliki."]}],
+q:[["Pelanggaran syarat objektif perjanjian mengakibatkan...",["Dapat dibatalkan","Batal demi hukum","Tetap sah","Ditunda"],1,"Hal tertentu & sebab halal bersifat objektif."],
+["Pelanggaran syarat subjektif mengakibatkan perjanjian...",["Batal demi hukum","Dapat dibatalkan","Tidak berpengaruh","Otomatis berakhir"],1,"Kesepakatan dan kecakapan: dapat dibatalkan."],
+["Organ Perseroan Terbatas meliputi...",["RUPS, Direksi, Dewan Komisaris","Direksi, Auditor, Notaris","RUPS, Auditor, Pemerintah","Komisaris, Notaris, Kreditur"],0,"Menurut UU PT ada tiga organ."],
+["Debitur yang lalai memenuhi prestasi disebut...",["Force majeure","Wanprestasi","Novasi","Subrogasi"],1,"Wanprestasi = ingkar janji."]]},
+{n:"Manajemen Keuangan",topics:[
+{t:"Penganggaran Modal",p:["NPV = nilai kini arus kas masuk - investasi awal; terima proyek jika NPV > 0.","IRR: tingkat diskonto yang membuat NPV = 0.","WACC: biaya modal rata-rata tertimbang, dipakai sebagai tingkat diskonto."]},
+{t:"Rasio & CAPM",p:["Current ratio = aset lancar / liabilitas lancar.","CAPM: Ke = Rf + Beta x (Rm - Rf)."]}],
+q:[["Proyek diterima jika...",["NPV < 0","NPV > 0","IRR < WACC","Payback tak terbatas"],1,"NPV positif menambah nilai perusahaan."],
+["WACC adalah...",["Laba rata-rata","Biaya modal rata-rata tertimbang","Rasio likuiditas","Arus kas bebas"],1,"Rata-rata tertimbang biaya utang dan ekuitas."],
+["Aset lancar 300 dan liabilitas lancar 150, current ratio =",["0,5","1,5","2,0","3,0"],2,"300/150 = 2,0."],
+["Rf 5%, Beta 1,2, Rm 10%. Biaya ekuitas (CAPM) =",["10%","11%","12%","6%"],1,"5% + 1,2 x 5% = 11%."]]}];
+const T=[];M.forEach((m,i)=>m.topics.forEach(t=>T.push({m:i,t:t.t})));
+const $=s=>document.querySelector(s),iso=d=>new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10),today=()=>iso(new Date());
+let S={},tab='home',exam=null,openM=null;
+const key=()=>'essenca_'+(user?user.uid:'guest');
+function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',2200)}
+async function save(){localStorage.setItem(key(),JSON.stringify(S));if(db&&user)try{await db.collection('users').doc(user.uid).set(S)}catch(e){toast('Gagal sinkron ke cloud')}}
+async function load(){S={done:{},results:[],plan:{date:'',start:today()}};try{Object.assign(S,JSON.parse(localStorage.getItem(key())||'{}'))}catch(e){}
+if(db&&user)try{const d=await db.collection('users').doc(user.uid).get();if(d.exists)Object.assign(S,d.data())}catch(e){}}
+if(useFb){firebase.initializeApp(FIREBASE_CONFIG);auth=firebase.auth();db=firebase.firestore();
+auth.onAuthStateChanged(async u=>{if(u){user=u;await start()}else if(!window._g){$('#auth').hidden=false;$('#app').hidden=true}})}
+async function start(){await load();$('#auth').hidden=true;$('#app').hidden=false;render()}
+function guest(){window._g=1;user=null;start()}
+function aerr(e){$('#aerr').textContent=useFb?e.message:'Isi FIREBASE_CONFIG di index.html terlebih dahulu.'}
+function login(){if(!useFb)return aerr();auth.signInWithEmailAndPassword($('#em').value,$('#pw').value).catch(aerr)}
+function reg(){if(!useFb)return aerr();auth.createUserWithEmailAndPassword($('#em').value,$('#pw').value).catch(aerr)}
+function logout(){window._g=0;user=null;if(useFb)auth.signOut();$('#auth').hidden=false;$('#app').hidden=true}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{tab=b.dataset.t;exam=null;openM=null;render()});
+function avg(i){const r=S.results.filter(x=>x.m===i);return r.length?Math.round(r.reduce((a,x)=>a+x.s,0)/r.length):null}
+function plan(){const p=S.plan;if(!p.date)return[];const s=new Date(p.start+'T00:00'),e=new Date(p.date+'T00:00');const n=Math.max(1,Math.round((e-s)/864e5));
+const st=Math.max(1,n-Math.min(2,Math.floor(n/4))),per=Math.ceil(T.length/st),o=[];
+for(let d=0;d<n;d++){const dt=iso(new Date(s.getTime()+d*864e5));let it;
+if(d<st){const x=T.slice(d*per,(d+1)*per);it=x.map(a=>'Pelajari: '+M[a.m].name+' - '+a.t);if(x.length)it.push('Latihan soal: '+[...new Set(x.map(a=>M[a.m].name))].join(', '))}
+else it=['Simulasi ujian campuran','Ulas soal yang salah'];o.push({dt,it})}return o}
+function render(){document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===tab));const v=$('#view');
+if(tab==='home'){const pl=plan(),td=pl.find(d=>d.dt===today());
+const dn=pl.filter(d=>S.done[d.dt]).length;
+v.innerHTML=`<h2>Beranda</h2>${useFb?'':'<div class="card muted">Mode lokal: data tersimpan di perangkat. Isi FIREBASE_CONFIG untuk sinkron cloud.</div>'}
+<div class="card"><h3>Jadwal hari ini</h3>${td?td.it.map(x=>`<li>${x}</li>`).join(''):'<p class="muted">Belum ada jadwal untuk hari ini. Atur tanggal ujian di tab Jadwal.</p>'}
+${pl.length?`<div class="bar" style="margin-top:8px"><i style="width:${Math.round(dn/pl.length*100)}%"></i></div><p class="muted">${dn}/${pl.length} hari selesai</p>`:''}</div>
+<div class="card"><h3>Nilai per modul</h3>${M.map((m,i)=>{const a=avg(i);return`<div class="row"><span style="flex:1">${m.n}</span><b>${a===null?'-':a}</b></div><div class="bar"><i style="width:${a||0}%"></i></div>`}).join('<br>')}</div>
+<div class="card"><h3>Riwayat ujian</h3>${S.results.length?S.results.slice(-8).reverse().map(r=>`<div class="row"><span style="flex:1">${r.d} - ${r.name}</span><b>${r.s}</b></div>`).join(''):'<p class="muted">Belum ada ujian.</p>'}</div>`}
+else if(tab==='mod'){if(openM===null)v.innerHTML=`<h2>Rangkuman Modul</h2>`+M.map((m,i)=>`<div class="card" onclick="openM=${i};render()" style="cursor:pointer"><h3>${m.n}</h3><span class="muted">${m.topics.length} topik, ${m.q.length} soal</span></div>`).join('');
+else{const m=M[openM];v.innerHTML=`<button class="sm sec" onclick="openM=null;render()">&larr; Kembali</button><h2>${m.n}</h2>`+m.topics.map(t=>`<div class="card"><h3>${t.t}</h3><ul>${t.p.map(x=>`<li>${x}</li>`).join('')}</ul></div>`).join('')+`<button onclick="startExam(${openM})">Latihan soal modul ini</button>`}}
+else if(tab==='ujian'){if(!exam)v.innerHTML=`<h2>Ujian</h2>`+M.map((m,i)=>`<div class="card row"><span style="flex:1">${m.n}</span><button class="sm" onclick="startExam(${i})">Mulai</button></div>`).join('')+`<div class="card row"><span style="flex:1">Campuran (semua modul)</span><button class="sm" onclick="startExam(-1)">Mulai</button></div>`;
+else renderExam()}
+else{const p=S.plan,pl=plan();v.innerHTML=`<h2>Jadwal Belajar</h2><div class="card"><label>Tanggal mulai</label><input type="date" id="ps" value="${p.start}"><label>Tanggal ujian</label><input type="date" id="pd" value="${p.date}"><button onclick="setPlan()">Buat jadwal harian</button></div>`+
+pl.map(d=>`<div class="day ${d.dt===today()?'today':''} ${S.done[d.dt]?'done':''}"><label class="row"><input type="checkbox" style="width:auto;margin:0" ${S.done[d.dt]?'checked':''} onchange="S.done['${d.dt}']=this.checked;save();render()"><b>${new Date(d.dt+'T00:00').toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'short'})}</b></label><ul>${d.it.map(x=>`<li>${x}</li>`).join('')}</ul></div>`).join('')}}
+function setPlan(){const s=$('#ps').value,d=$('#pd').value;if(!s||!d||d<=s)return toast('Tanggal ujian harus setelah tanggal mulai');S.plan={start:s,date:d};S.done={};save();render()}
+function startExam(i){let q=[];if(i<0)M.forEach((m,k)=>m.q.forEach(x=>q.push({m:k,x})));else M[i].q.forEach(x=>q.push({m:i,x}));
+q.sort(()=>Math.random()-.5);exam={i,q,ans:{},done:false};tab='ujian';render()}
+function renderExam(){const e=exam,name=e.i<0?'Campuran':M[e.i].name;let sc=0;
+const h=e.q.map((o,k)=>{const x=o.x;if(e.done&&e.ans[k]===x[2])sc++;
+return`<div class="card"><b>${k+1}. ${x[0]}</b>`+x[1].map((t,j)=>{let c='';if(e.done)c=j===x[2]?'ok':(e.ans[k]===j?'bad':'');
+return`<label class="opt ${c}"><input type="radio" name="q${k}" ${e.ans[k]===j?'checked':''} ${e.done?'disabled':''} onchange="exam.ans[${k}]=${j}"> ${t}</label>`}).join('')+(e.done?`<div class="exp">${e.ans[k]===x[2]?'Benar. ':'Salah. '}${x[3]}</div>`:'')+`</div>`}).join('');
+const s=Math.round(sc/e.q.length*100);
+$('#view').innerHTML=`<h2>${name}</h2>${e.done?`<div class="card"><h3>Skor: ${s} (${sc}/${e.q.length} benar)</h3><button onclick="exam=null;render()">Selesai</button></div>`:''}${h}${e.done?'':'<button onclick="submitExam()">Kumpulkan & koreksi</button>'}`}
+function submitExam(){const e=exam;if(Object.keys(e.ans).length<e.q.length&&!confirm('Masih ada soal belum dijawab. Kumpulkan?'))return;
+let sc=0;e.q.forEach((o,k)=>{if(e.ans[k]===o.x[2])sc++});e.done=true;
+S.results.push({m:e.i,name:e.i<0?'Campuran':M[e.i].name,s:Math.round(sc/e.q.length*100),d:today()});save();renderExam();scrollTo(0,0)}
+if('serviceWorker'in navigator)addEventListener('load',()=>navigator.serviceWorker.register('service-worker.js'));
+if(!useFb){$('#auth').querySelector('p.muted').insertAdjacentHTML('afterend','<p class="muted">Firebase belum dikonfigurasi.</p>')}
+</script></body></html>
